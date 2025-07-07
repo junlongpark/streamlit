@@ -12,7 +12,7 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from langchain.memory import ConversationBufferMemory
 from langchain_community.vectorstores import FAISS
-
+from sentence_transformers import SentenceTransformer
 # from streamlit_chat import message
 from langchain_community.callbacks.manager import get_openai_callback
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory

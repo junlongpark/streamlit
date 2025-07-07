@@ -5,17 +5,19 @@ from loguru import logger
 from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredPowerPointLoader
+from langchain.document_loaders import PyPDFLoader
+from langchain.document_loaders import Docx2txtLoader
+from langchain.document_loaders import UnstructuredPowerPointLoader
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 
 from langchain.memory import ConversationBufferMemory
-from langchain_community.vectorstores import FAISS
-from sentence_transformers import SentenceTransformer
+from langchain.vectorstores import FAISS
+
 # from streamlit_chat import message
-from langchain_community.callbacks.manager import get_openai_callback
-from langchain_community.chat_message_histories import StreamlitChatMessageHistory
+from langchain.callbacks import get_openai_callback
+from langchain.memory import StreamlitChatMessageHistory
 
 def main():
     st.set_page_config(
@@ -78,9 +80,9 @@ def main():
 
                 st.markdown(response)
                 with st.expander("참고 문서 확인"):
-                    for i, doc in enumerate(source_documents[:3]):
-                        st.markdown(doc.metadata.get('source', 'No Source'), help=doc.page_content)
-
+                    st.markdown(source_documents[0].metadata['source'], help = source_documents[0].page_content)
+                    st.markdown(source_documents[1].metadata['source'], help = source_documents[1].page_content)
+                    st.markdown(source_documents[2].metadata['source'], help = source_documents[2].page_content)
                     
 
 
@@ -92,25 +94,27 @@ def tiktoken_len(text):
     tokens = tokenizer.encode(text)
     return len(tokens)
 
-import tempfile
 def get_text(docs):
+
     doc_list = []
+    
     for doc in docs:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=doc.name[-5:]) as tmp:
-            tmp.write(doc.getvalue())
-            tmp_path = tmp.name
+        file_name = doc.name  # doc 객체의 이름을 파일 이름으로 사용
+        with open(file_name, "wb") as file:  # 파일을 doc.name으로 저장
+            file.write(doc.getvalue())
+            logger.info(f"Uploaded {file_name}")
+        if '.pdf' in doc.name:
+            loader = PyPDFLoader(file_name)
+            documents = loader.load_and_split()
+        elif '.docx' in doc.name:
+            loader = Docx2txtLoader(file_name)
+            documents = loader.load_and_split()
+        elif '.pptx' in doc.name:
+            loader = UnstructuredPowerPointLoader(file_name)
+            documents = loader.load_and_split()
 
-        if doc.name.endswith(".pdf"):
-            loader = PyPDFLoader(tmp_path)
-        elif doc.name.endswith(".docx"):
-            loader = Docx2txtLoader(tmp_path)
-        elif doc.name.endswith(".pptx"):
-            loader = UnstructuredPowerPointLoader(tmp_path)
-
-        documents = loader.load_and_split()
         doc_list.extend(documents)
     return doc_list
-
 
 
 def get_text_chunks(text):
@@ -124,15 +128,11 @@ def get_text_chunks(text):
 
 
 def get_vectorstore(text_chunks):
-    model = SentenceTransformer(
-        "sentence-transformers/all-MiniLM-L6-v2",
-        device="cpu",   # 또는 "cuda" 가능
-        # 아래 코드가 핵심입니다 👇
-        cache_folder=None,
-        use_auth_token=False
-    )
-
-    embeddings = HuggingFaceEmbeddings(model_name=None, client=model)
+    embeddings = HuggingFaceEmbeddings(
+                                        model_name="jhgan/ko-sroberta-multitask",
+                                        model_kwargs={'device': 'cpu'},
+                                        encode_kwargs={'normalize_embeddings': True}
+                                        )  
     vectordb = FAISS.from_documents(text_chunks, embeddings)
     return vectordb
 
@@ -141,7 +141,7 @@ def get_conversation_chain(vetorestore,openai_api_key):
     conversation_chain = ConversationalRetrievalChain.from_llm(
             llm=llm, 
             chain_type="stuff", 
-            retriever=vetorestore.as_retriever(search_type = 'mmr', verbose = True), 
+            retriever=vetorestore.as_retriever(search_type = 'mmr', vervose = True), 
             memory=ConversationBufferMemory(memory_key='chat_history', return_messages=True, output_key='answer'),
             get_chat_history=lambda h: h,
             return_source_documents=True,

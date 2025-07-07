@@ -1,6 +1,5 @@
 pysqlite3-binary
 langchain
-langchain-community
 chromadb
 unstructured
 sentence-transformers
@@ -10,7 +9,3 @@ openai
 pypdf
 loguru
 docx2txt
-torch==2.0.1+cpu
-torchvision==0.15.2+cpu
-torchaudio==2.0.2+cpu
---extra-index-url https://download.pytorch.org/whl/cpu

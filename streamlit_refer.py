@@ -126,7 +126,7 @@ def get_text_chunks(text):
 def get_vectorstore(text_chunks):
     model = SentenceTransformer(
         "sentence-transformers/all-MiniLM-L6-v2",
-        device="cuda",   # 또는 "cuda" 가능
+        device="cpu",   # 또는 "cuda" 가능
         # 아래 코드가 핵심입니다 👇
         cache_folder=None,
         use_auth_token=False

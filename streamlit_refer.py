@@ -5,19 +5,17 @@ from loguru import logger
 from langchain.chains import ConversationalRetrievalChain
 from langchain.chat_models import ChatOpenAI
 
-from langchain.document_loaders import PyPDFLoader
-from langchain.document_loaders import Docx2txtLoader
-from langchain.document_loaders import UnstructuredPowerPointLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredPowerPointLoader
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from langchain.memory import ConversationBufferMemory
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 
 # from streamlit_chat import message
-from langchain.callbacks import get_openai_callback
-from langchain.memory import StreamlitChatMessageHistory
+from langchain_community.callbacks.manager import get_openai_callback
+from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 
 def main():
     st.set_page_config(
@@ -127,7 +125,7 @@ def get_text_chunks(text):
 
 def get_vectorstore(text_chunks):
     embeddings = HuggingFaceEmbeddings(
-                                        model_name="jhgan/ko-sroberta-multitask",
+                                        model_name="sentence-transformers/all-MiniLM-L6-v2",
                                         model_kwargs={'device': 'cpu'},
                                         encode_kwargs={'normalize_embeddings': True}
                                         )  

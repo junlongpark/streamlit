@@ -124,7 +124,14 @@ def get_text_chunks(text):
 
 
 def get_vectorstore(text_chunks):
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
+    model = SentenceTransformer(
+        "sentence-transformers/all-MiniLM-L6-v2",
+        device="cpu",   # 또는 "cuda" 가능
+        # 아래 코드가 핵심입니다 👇
+        cache_folder=None,
+        use_auth_token=False
+    )
+
     embeddings = HuggingFaceEmbeddings(model_name=None, client=model)
     vectordb = FAISS.from_documents(text_chunks, embeddings)
     return vectordb

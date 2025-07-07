@@ -10,3 +10,4 @@ openai
 pypdf
 loguru
 docx2txt
+torch==2.0.1

@@ -94,27 +94,25 @@ def tiktoken_len(text):
     tokens = tokenizer.encode(text)
     return len(tokens)
 
+import tempfile
 def get_text(docs):
-
     doc_list = []
-    
     for doc in docs:
-        file_name = doc.name  # doc 객체의 이름을 파일 이름으로 사용
-        with open(file_name, "wb") as file:  # 파일을 doc.name으로 저장
-            file.write(doc.getvalue())
-            logger.info(f"Uploaded {file_name}")
-        if '.pdf' in doc.name:
-            loader = PyPDFLoader(file_name)
-            documents = loader.load_and_split()
-        elif '.docx' in doc.name:
-            loader = Docx2txtLoader(file_name)
-            documents = loader.load_and_split()
-        elif '.pptx' in doc.name:
-            loader = UnstructuredPowerPointLoader(file_name)
-            documents = loader.load_and_split()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=doc.name[-5:]) as tmp:
+            tmp.write(doc.getvalue())
+            tmp_path = tmp.name
 
+        if doc.name.endswith(".pdf"):
+            loader = PyPDFLoader(tmp_path)
+        elif doc.name.endswith(".docx"):
+            loader = Docx2txtLoader(tmp_path)
+        elif doc.name.endswith(".pptx"):
+            loader = UnstructuredPowerPointLoader(tmp_path)
+
+        documents = loader.load_and_split()
         doc_list.extend(documents)
     return doc_list
+
 
 
 def get_text_chunks(text):

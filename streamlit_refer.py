@@ -13,10 +13,11 @@ from langchain.schema import Document
 from langchain.memory import StreamlitChatMessageHistory
 from langchain.callbacks import get_openai_callback
 
+
 # ----- Streamlit 앱 시작 -----
 def main():
     st.set_page_config(
-        page_title="질문 기반 Wikipedia QA Chat",
+        page_title="Wikipedia QA Chat",
         page_icon="📚"
     )
 
@@ -53,14 +54,19 @@ def main():
                 st.warning("OpenAI API 키를 입력해주세요.")
                 st.stop()
 
-            # 🔍 질문 → 위키 문서 검색
-            title, wiki_text = search_wikipedia_from_question(query)
-            if not wiki_text:
-                st.warning("Wikipedia에서 관련 문서를 찾을 수 없습니다.")
-                st.stop()
+            # 🔍 질문 → 위키 문서 검색 (복수 결과 수집)
+            wiki_documents = search_wikipedia_from_question(query)
+            
+            if not wiki_documents:
+                # ✅ fallback: LLM이 직접 답변
+                fallback_llm = ChatOpenAI(openai_api_key=openai_api_key, model_name='gpt-3.5-turbo', temperature=0)
+                response = fallback_llm.predict(query)
+                st.markdown(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                return
 
-            documents = [Document(page_content=wiki_text, metadata={"source": f"https://ko.wikipedia.org/wiki/{title}"})]
-            text_chunks = get_text_chunks(documents)
+            # 🔗 chunking + vectorstore
+            text_chunks = get_text_chunks(wiki_documents)
             vectorstore = get_vectorstore(text_chunks)
             st.session_state.conversation = get_conversation_chain(vectorstore, openai_api_key)
 
@@ -77,29 +83,39 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
 
 
-# ----- 함수: 질문 → 위키 검색 및 문서 가져오기 -----
+# ----- 함수: 질문 → 위키 문서 다건 검색 및 수집 -----
 def search_wikipedia_from_question(query, lang='ko'):
     wikipedia.set_lang(lang)
+    documents = []
+
     try:
-        search_results = wikipedia.search(query, results=1)
+        search_results = wikipedia.search(query, results=3)
         if not search_results:
-            return None, None
-        best_title = search_results[0]
-        page = wikipedia.page(best_title)
-        return best_title, page.content
+            return None
+
+        for title in search_results:
+            try:
+                page = wikipedia.page(title)
+                doc = Document(page_content=page.content, metadata={"source": page.url})
+                documents.append(doc)
+            except:
+                continue
+
+        return documents if documents else None
+
     except Exception as e:
         logger.error(f"Wikipedia 검색 실패: {e}")
-        return None, None
+        return None
 
 
-# ----- 함수: 텍스트 길이 계산 (tiktoken 기반) -----
+# ----- 함수: 텍스트 길이 계산 -----
 def tiktoken_len(text):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     tokens = tokenizer.encode(text)
     return len(tokens)
 
 
-# ----- 함수: 문서 chunking -----
+# ----- 함수: chunking -----
 def get_text_chunks(text_docs):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=900,
@@ -139,6 +155,7 @@ def get_conversation_chain(vectorstore, openai_api_key):
 # ----- 실행 -----
 if __name__ == '__main__':
     main()
+
 
 
 

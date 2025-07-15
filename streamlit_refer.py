@@ -16,11 +16,11 @@ from langchain.callbacks import get_openai_callback
 # ----- Streamlit 앱 시작 -----
 def main():
     st.set_page_config(
-        page_title="Wikipedia QA Chat",
+        page_title="질문 기반 Wikipedia QA Chat",
         page_icon="📚"
     )
 
-    st.title("_Wikipedia 기반 :red[QA Chat]_ :books:")
+    st.title("_Wikipedia 기반 :red[질문형 QA Chat]_ :books:")
 
     if "conversation" not in st.session_state:
         st.session_state.conversation = None
@@ -30,85 +30,76 @@ def main():
         st.session_state.processComplete = None
     if "messages" not in st.session_state:
         st.session_state['messages'] = [{"role": "assistant", 
-                                        "content": "안녕하세요! 위키피디아 기반 QA 챗봇입니다. 궁금한 주제를 입력하고 질문해보세요!"}]
+                                         "content": "안녕하세요! 궁금한 내용을 질문해주세요. 관련 Wikipedia 문서를 검색해서 답변해드릴게요."}]
 
-    # ----- 사이드바 -----
     with st.sidebar:
-        keyword = st.text_input("📚 Wikipedia 키워드 입력", key="wiki_keyword")
         openai_api_key = st.text_input("🔑 OpenAI API Key", key="chatbot_api_key", type="password")
-        process = st.button("🔄 검색 및 임베딩")
 
-    # ----- Wikipedia 처리 -----
-    if process:
-        if not openai_api_key:
-            st.info("Please add your OpenAI API key to continue.")
-            st.stop()
-        if not keyword:
-            st.info("Wikipedia 키워드를 입력하세요.")
-            st.stop()
-
-        wiki_text = get_text_from_wikipedia(keyword)
-        if not wiki_text:
-            st.warning("Wikipedia에서 문서를 찾을 수 없습니다.")
-            st.stop()
-
-        documents = [Document(page_content=wiki_text, metadata={"source": f"https://ko.wikipedia.org/wiki/{keyword}"})]
-        text_chunks = get_text_chunks(documents)
-        vectorstore = get_vectorstore(text_chunks)
-
-        st.session_state.conversation = get_conversation_chain(vectorstore, openai_api_key)
-        st.session_state.processComplete = True
-
-    # ----- 이전 대화 출력 -----
+    # 이전 대화 표시
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
     history = StreamlitChatMessageHistory(key="chat_messages")
 
-    # ----- 유저 질문 처리 -----
-    if query := st.chat_input("질문을 입력해주세요."):
+    # 질문 입력
+    if query := st.chat_input("궁금한 점을 입력하세요. 예: 대한민국의 수도는 어디인가요?"):
         st.session_state.messages.append({"role": "user", "content": query})
-
         with st.chat_message("user"):
             st.markdown(query)
 
         with st.chat_message("assistant"):
-            chain = st.session_state.conversation
+            if not openai_api_key:
+                st.warning("OpenAI API 키를 입력해주세요.")
+                st.stop()
+
+            # 🔍 질문 → 위키 문서 검색
+            title, wiki_text = search_wikipedia_from_question(query)
+            if not wiki_text:
+                st.warning("Wikipedia에서 관련 문서를 찾을 수 없습니다.")
+                st.stop()
+
+            documents = [Document(page_content=wiki_text, metadata={"source": f"https://ko.wikipedia.org/wiki/{title}"})]
+            text_chunks = get_text_chunks(documents)
+            vectorstore = get_vectorstore(text_chunks)
+            st.session_state.conversation = get_conversation_chain(vectorstore, openai_api_key)
 
             with st.spinner("Thinking..."):
-                result = chain({"question": query})
-                with get_openai_callback() as cb:
-                    st.session_state.chat_history = result['chat_history']
-
+                result = st.session_state.conversation({"question": query})
                 response = result['answer']
                 source_documents = result['source_documents']
-
                 st.markdown(response)
+
                 with st.expander("📄 참고한 위키 문서"):
                     for doc in source_documents:
                         st.markdown(f"[{doc.metadata['source']}]({doc.metadata['source']})")
 
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append({"role": "assistant", "content": response})
 
 
-# ----- 함수: Wikipedia에서 문서 가져오기 -----
-def get_text_from_wikipedia(keyword, lang='ko'):
+# ----- 함수: 질문 → 위키 검색 및 문서 가져오기 -----
+def search_wikipedia_from_question(query, lang='ko'):
     wikipedia.set_lang(lang)
     try:
-        summary = wikipedia.page(keyword).content
-        return summary
+        search_results = wikipedia.search(query, results=1)
+        if not search_results:
+            return None, None
+        best_title = search_results[0]
+        page = wikipedia.page(best_title)
+        return best_title, page.content
     except Exception as e:
         logger.error(f"Wikipedia 검색 실패: {e}")
-        return None
+        return None, None
 
 
-# ----- 함수: 텍스트를 토큰 수 기준으로 자르기 -----
+# ----- 함수: 텍스트 길이 계산 (tiktoken 기반) -----
 def tiktoken_len(text):
     tokenizer = tiktoken.get_encoding("cl100k_base")
     tokens = tokenizer.encode(text)
     return len(tokens)
 
+
+# ----- 함수: 문서 chunking -----
 def get_text_chunks(text_docs):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=900,
@@ -119,7 +110,7 @@ def get_text_chunks(text_docs):
     return chunks
 
 
-# ----- 함수: 텍스트를 벡터스토어로 변환 -----
+# ----- 함수: 벡터스토어 생성 -----
 def get_vectorstore(text_chunks):
     embeddings = HuggingFaceEmbeddings(
         model_name="jhgan/ko-sroberta-multitask",
@@ -130,7 +121,7 @@ def get_vectorstore(text_chunks):
     return vectordb
 
 
-# ----- 함수: Conversational RAG 체인 만들기 -----
+# ----- 함수: RAG QA 체인 생성 -----
 def get_conversation_chain(vectorstore, openai_api_key):
     llm = ChatOpenAI(openai_api_key=openai_api_key, model_name='gpt-3.5-turbo', temperature=0)
     conversation_chain = ConversationalRetrievalChain.from_llm(
@@ -148,4 +139,5 @@ def get_conversation_chain(vectorstore, openai_api_key):
 # ----- 실행 -----
 if __name__ == '__main__':
     main()
+
 

@@ -84,7 +84,7 @@ def main():
 
 
 # ----- 함수: 질문 → 위키 문서 다건 검색 및 수집 -----
-def search_wikipedia_from_question(query, lang='ko'):
+def search_wikipedia_from_question(query, lang='en'):
     wikipedia.set_lang(lang)
     documents = []
 

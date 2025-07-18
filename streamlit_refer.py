@@ -59,7 +59,7 @@ def main():
             
             if not wiki_documents:
                 # ✅ fallback: LLM이 직접 답변
-                fallback_llm = ChatOpenAI(openai_api_key=openai_api_key, model_name='babbage-002', temperature=0)
+                fallback_llm = ChatOpenAI(openai_api_key=openai_api_key, model_name='gpt-3.5-turbo', temperature=0)
                 response = fallback_llm.predict(query)
                 st.markdown(response)
                 st.session_state.messages.append({"role": "assistant", "content": response})
